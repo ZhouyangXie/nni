@@ -72,6 +72,24 @@ class ModelSpeedup:
 
         m_type = self.torch_graph.name_to_node[module_name].op_type
         _logger.debug("infer mask of module %s with op_type %s", module_name, m_type)
+
+        # handle many-to-many node operation
+        # previous mechanism can handle one-to-one, many-to-one, one-to-many nodes
+        # but the last couple of lines failed to pass many masks to many nodes 
+        if m_type in ['prim::TupleUnpack']:
+            assert mask is None
+            predecessors = self.torch_graph.find_predecessors(module_name)
+            successors = self.torch_graph.find_successors(module_name)
+            for predecessor, successor in zip(predecessors, successors):
+                if predecessor == last_module:
+                    assert in_shape is not None
+                    self.infer_module_mask(successor, last_module, in_shape=in_shape)
+                if successor == last_module:
+                    assert out_shape is not None
+                    self.infer_module_mask(predecessor, last_module, out_shape=out_shape)
+            return
+
+
         if mask is not None:
             _logger.debug("mask is not None")
             if not m_type in infer_from_mask:
