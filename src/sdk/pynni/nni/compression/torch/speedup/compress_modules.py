@@ -17,6 +17,7 @@ replace_module = {
     'ReLU6': lambda module, mask: no_replace(module, mask),
     'Sigmoid': lambda module, mask: no_replace(module, mask),
     'LeakyReLU': lambda module, mask: no_replace(module, mask),
+    'Mish': lambda module, mask: no_replace(module, mask),
     'Upsample': lambda module, mask: no_replace(module, mask),
     'Linear': lambda module, mask: replace_linear(module, mask),
     'Dropout': lambda module, mask: no_replace(module, mask),
