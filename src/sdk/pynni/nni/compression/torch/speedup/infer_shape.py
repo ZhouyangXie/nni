@@ -378,6 +378,10 @@ def cat_inshape(module_masks, mask, cat_info, last_visited):
         output_mask = CoarseMask(num_dim=len(out_shape))
         for dim, _ in enumerate(out_shape):
             if dim == cat_dim:
+
+                # initialize output_mask as a non-None full mask
+                output_mask.mask_index[dim] = torch.arange(out_shape[dim])
+
                 if mask.mask_index[dim] is None:
                     continue
                 device = mask.mask_index[dim].device
@@ -388,8 +392,13 @@ def cat_inshape(module_masks, mask, cat_info, last_visited):
                 offset = 0
                 for i in range(pos):
                     offset += offsets[i]
-                _tmp_mask = (mask.mask_index[dim] + offset).to(device)
-                output_mask.mask_index[dim] = _tmp_mask
+                
+                _tmp_mask = (mask.mask_index[dim] + offset).tolist()
+                sub_full_mask = set(range(offset, offset+offsets[pos]))
+                to_remove = sub_full_mask - set(_tmp_mask)
+                to_keep = set(output_mask.mask_index[dim].tolist()) - to_remove
+
+                output_mask.mask_index[dim] = torch.tensor(list(to_keep)).to(device)
             else:
                 # directly copy the mask
                 if mask.mask_index[dim] is not None:
@@ -413,9 +422,13 @@ def cat_inshape(module_masks, mask, cat_info, last_visited):
             for i in range(pos):
                 offset += offsets[i]
             device = mask.mask_index[dim].device
-            new_mask = mask.mask_index[dim] + offset
-            module_masks.output_mask.mask_index[dim] = CoarseMask.merge_index(
-                module_masks.output_mask.mask_index[dim], new_mask).to(device)
+
+            new_mask = (mask.mask_index[dim] + offset).tolist()
+            sub_full_mask = set(range(offset, offset+offsets[pos]))
+            to_remove = sub_full_mask - set(new_mask)
+            to_keep = set(module_masks.output_mask.mask_index[dim].tolist()) - to_remove
+
+            module_masks.output_mask.mask_index[dim] = torch.tensor(list(to_keep)).to(device)
         else:
             assert module_masks.output_mask.eq_on_dim(mask, dim)
 
