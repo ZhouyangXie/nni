@@ -1,12 +1,33 @@
-# Notes for fixes over NNIv1.9
-This is a note for the fixes over NNI of the current branch(v1.9). Trace the changes in files by 'git log'.
+# Notes for fixes over branch ubd
+This is a note for the fixes over NNI(v1.9) on this new branch ubd. Trace the changes in files by 'git log'. We skip some trivial commits whose message is self-explanatory.
+
+* commit e2b00fe72d167e6e815ff9ef4c498f17b779ba82
+Date:   Wed Jan 13 16:53:08 2021 +0800
+
+    a quick in-test fix on compress()'s problem with bn etc.
+
+    We add some utility functions inside `test_compress.py` to address the issue spotted in the last commit. We first alter the zeros in weight masks and bias masks to NaN. This will cause all the values dependent on to-be-pruned weight/bias to become NaN. Then, we resolve NaNs by setting NaN as zero before FC/Conv, where zero input is output-neutral. This solution is not ultimate, but any error can be spotted from NaN in model output.
+
+* commit f5f04fe1972e6d3d961cdfa934fde559c6f6010f
+Date:   Sun Jan 10 23:28:20 2021 +0800
+
+    reveal how SpeedUp fails to handle batchnorm bias
+
+    We add a test script `/src/sdk/pynni/tests/test_compress.py` to show that simple zero-masking strategy of pruners will leave some channels' bias of batchnorm effective, which should have been masked as well. This problem will also apply to those operations to whom zero input is not output-neutral. This problem will finally result to different output of models after compress() and after speedup().
+
+* commit 6f34452d407c6f449c2a0ed25d6900e76988fc55
+Date:   Fri Jan 8 12:48:10 2021 +0800
+
+    SlimPruner is not dependency-aware, incompatible with resnet
+
+    We add a test script `/src/sdk/pynni/tests/test_speedup_op_add.py` to reveal that SlimPruner is not compatible with `aten::add`(tensor addition), which is an essential part of residual networks. This is because SlimPruner is not dependency-aware, pruning different channels of the two input of the addition.
 
 * commit 2522981516866d283d54707cecd8d70d56705166
 Date:   Mon Jan 4 16:42:33 2021 +0800
 
     fix aten::cat mask inference
 
-    To explain: NNI infers masks for a node as `None` if the mask is a full one(i.e. no channel is going to be pruned, equivalent to `torch.arange(dim_size)`). But this fails for operation `aten::cat`(see `cat_inshape` in `\src\sdk\pynni\nni\compression\torch\speedup\infer_shape.py`) when the node has multiple predecessors but anyone(but not all) of them don't update the mask by `out_shape`. The unupdated mask, supposed to be a full mask, is taken as empty. It would not incur warning before model forwarding and would cause runtime error because the channels are not aligned.
+    To explain: NNI infers masks for a node as `None` if the mask is a full one(i.e. no channel is going to be pruned, equivalent to `torch.arange(dim_size)`). But this fails for operation `aten::cat`(see `cat_inshape` in `/src/sdk/pynni/nni/compression/torch/speedup/infer_shape.py`) when the node has multiple predecessors but anyone(but not all) of them don't update the mask by `out_shape`. The unupdated mask, supposed to be a full mask, is taken as empty. It would not incur warning before model forwarding and would cause runtime error because the channels are not aligned.
 
     The fix sets the default output mask of `aten::cat` as a full mask `torch.arange(dim_size)` and prune the channels decrementally.
 
