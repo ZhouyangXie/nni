@@ -1,6 +1,8 @@
 import torch
+from torch.autograd import Function
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.modules.module import Module
 
 from nni.compression.torch import L1FilterPruner
 from nni.compression.torch.speedup import ModelSpeedup
@@ -52,9 +54,25 @@ class NanMasker(object):
 
     @staticmethod
     def _hook_resolve_nan(module, inputs):
-        for input in inputs:
-            if isinstance(input, torch.Tensor):
-                input[torch.isnan(input)] = 0
+        class resolve_nan(Function):
+            def __init__(self) -> None:
+                super().__init__()
+                self.nan_mask = None
+            
+            def forward(self, x):
+                self.nan_mask = torch.isnan(x)
+                x_unmasked = x.clone()
+                x_unmasked[self.nan_mask] = 0
+                return x_unmasked
+
+            def backward(self, output_grad):
+                input_grad = output_grad.clone()
+                input_grad[self.nan_mask] = 0
+                return input_grad
+
+        return tuple([
+            resolve_nan()(input) for input in inputs
+        ])
 
     def __enter__(self):
         self._set_nan_mask()
@@ -105,9 +123,13 @@ def test_compress_speedup():
     model = pruner.compress()
 
     with nan_masking(pruner):
+        # torch.autograd.set_detect_anomaly(True)
         model = model.to(device)
+        model.train()
         dummy_input = torch.rand(1, 1, 11, 11).to(device)
         y_compress = model(dummy_input)
+        loss = y_compress.sum()
+        loss.backward()
 
     pruner.export_model(model_path='finetuned.pth', mask_path='mask.pth')
 
